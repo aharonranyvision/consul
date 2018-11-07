@@ -126,7 +126,17 @@ func TestACLReplication_diffACLPolicies(t *testing.T) {
 
 func TestACLReplication_diffACLTokens(t *testing.T) {
 	local := structs.ACLTokens{
-		// just after a 1.3->1.4 upgrade this will happen in the remote
+		// When a just-upgraded (1.3->1.4+) secondary DC is replicating from an
+		// upgraded primary DC (1.4+), the local state for tokens predating the
+		// upgrade will lack AccessorIDs.
+		//
+		// The primary DC will lazily perform the update to assign AccessorIDs,
+		// and that new update will come across the wire locally as a new
+		// insert.
+		//
+		// We simulate that scenario here with 'token0' having no AccessorID in
+		// the secondary (local) DC and having an AccessorID assigned in the
+		// payload retrieved from the primary (remote) DC.
 		&structs.ACLToken{
 			AccessorID:  "",
 			SecretID:    "5128289f-c22c-4d32-936e-7662443f1a55",
@@ -201,6 +211,16 @@ func TestACLReplication_diffACLTokens(t *testing.T) {
 			CreateIndex: 1,
 			ModifyIndex: 50,
 		},
+		// When a 1.4+ secondary DC is replicating from a 1.4+ primary DC,
+		// tokens created using the legacy APIs will not initially have
+		// AccessorIDs assigned. That assignment is lazy (but in quick
+		// succession).
+		//
+		// The secondary (local) will see these in the api response as a stub
+		// with "" as the AccessorID.
+		//
+		// We simulate that here to verify that the secondary does the right
+		// thing by skipping them until it sees them with nonempty AccessorIDs.
 		&structs.ACLTokenListStub{
 			AccessorID:  "",
 			Description: "token6 - pending async AccessorID assignment",
